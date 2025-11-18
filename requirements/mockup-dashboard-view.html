@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HockeySense AI | Talent Evaluation Platform</title>
+
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        body { background-color: #f3f4f6; font-family: 'Inter', sans-serif; }
+        .slider-thumb::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #2563eb;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- DATA MODELS & MOCK DATA ---
+
+        // The Core Scoring Model (Weighted Hierarchy)
+        const SCORING_MODEL = {
+            technical: {
+                id: 'tech',
+                name: 'Technical Skills',
+                weight: 0.4, // 40% of total player score
+                constructs: [
+                    { id: 'dist', name: 'Ball Distribution', weight: 0.3, rubric: 'Focuses on pass accuracy, speed, and decision making under pressure.' },
+                    { id: 'rec', name: 'Ball Reception', weight: 0.3, rubric: 'Ability to receive open and closed stick while moving.' },
+                    { id: 'elim', name: 'Elimination Skills', weight: 0.4, rubric: '1v1 offensive capability and stick work.' }
+                ]
+            },
+            tactical: {
+                id: 'tact',
+                name: 'Game Intelligence',
+                weight: 0.4,
+                constructs: [
+                    { id: 'off_pos', name: 'Offensive Positioning', weight: 0.5, rubric: 'Finding space in the circle and passing lanes.' },
+                    { id: 'def_pos', name: 'Defensive Structure', weight: 0.5, rubric: 'Man-marking tightness and zonal awareness.' }
+                ]
+            },
+            physical: {
+                id: 'phys',
+                name: 'Athletic Abilities',
+                weight: 0.2,
+                isObjective: true, // Special flag for Section 2.3
+                constructs: [
+                    { id: 'sprint', name: '30m Sprint (sec)', weight: 0.5, type: 'measurement', benchmark: (val) => val < 4.0 ? 10 : val < 4.2 ? 8 : val < 4.5 ? 6 : 4 },
+                    { id: 'yo_yo', name: 'Yo-Yo Test (level)', weight: 0.5, type: 'measurement', benchmark: (val) => val > 20 ? 10 : val > 18 ? 8 : val > 16 ? 6 : 4 }
+                ]
+            }
+        };
+
+        const MOCK_ROSTER = [
+            { id: 1, name: "Sarah Van Dijk", position: "Midfielder", status: "Review Pending", avatar: "SV", gap: 0.8, scores: { coach: {}, player: {} } },
+            { id: 2, name: "Tom Becker", position: "Striker", status: "Completed", avatar: "TB", gap: 0.2, scores: { coach: {}, player: {} } },
+            { id: 3, name: "Emily Chen", position: "Defender", status: "Self-Rating Needed", avatar: "EC", gap: null, scores: { coach: {}, player: {} } },
+        ];
+
+        // --- COMPONENTS ---
+
+        // 1. Radar Chart Component (Chart.js wrapper)
+        const RadarChart = ({ coachScores, playerScores, labels }) => {
+            const chartRef = useRef(null);
+            const canvasRef = useRef(null);
+
+            useEffect(() => {
+                if (chartRef.current) chartRef.current.destroy();
+
+                const ctx = canvasRef.current.getContext('2d');
+                chartRef.current = new Chart(ctx, {
+                    type: 'radar',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                label: 'Coach Rating',
+                                data: coachScores,
+                                backgroundColor: 'rgba(37, 99, 235, 0.2)',
+                                borderColor: 'rgba(37, 99, 235, 1)',
+                                pointBackgroundColor: 'rgba(37, 99, 235, 1)',
+                                borderWidth: 2
+                            },
+                            {
+                                label: 'Player Self-Rating',
+                                data: playerScores,
+                                backgroundColor: 'rgba(156, 163, 175, 0.2)',
+                                borderColor: 'rgba(156, 163, 175, 1)',
+                                pointBackgroundColor: 'rgba(156, 163, 175, 1)',
+                                borderWidth: 2,
+                                borderDash: [5, 5]
+                            }
+                        ]
+                    },
+                    options: {
+                        scales: {
+                            r: {
+                                min: 0,
+                                max: 10,
+                                ticks: { stepSize: 2 }
+                            }
+                        },
+                        plugins: {
+                            legend: { position: 'bottom' }
+                        }
+                    }
+                });
+
+                return () => { if(chartRef.current) chartRef.current.destroy(); }
+            }, [coachScores, playerScores, labels]);
+
+            return <canvas ref={canvasRef} />;
+        };
+
+        // 2. Input Slider Component (Level 2 Construct)
+        const ScoreInput = ({ construct, value, onChange, isLocked, onAttach }) => {
+            const [showRubric, setShowRubric] = useState(false);
+
+            // Handle Objective Data (Section 2.3)
+            if (construct.type === 'measurement') {
+                return (
+                    <div className="mb-6 p-4 bg-white rounded-lg shadow-sm border border-gray-200">
+                        <div className="flex justify-between items-center mb-2">
+                            <label className="font-semibold text-gray-700">{construct.name}</label>
+                            <span className="text-sm font-mono bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                Calculated Rating: {value ? construct.benchmark(value) : '-'} / 10
+                            </span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <input
+                                type="number"
+                                step="0.1"
+                                disabled={isLocked}
+                                value={value || ''}
+                                onChange={(e) => onChange(parseFloat(e.target.value))}
+                                className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                                placeholder="Enter raw data..."
+                            />
+                            <div className="text-xs text-gray-500">Benchmarks against elite tier data</div>
+                        </div>
+                    </div>
+                )
+            }
+
+            // Standard Subjective Slider
+            return (
+                <div className="mb-6 p-4 bg-white rounded-lg shadow-sm border border-gray-200 relative group hover:border-blue-300 transition-all">
+                    <div className="flex justify-between items-end mb-3">
+                        <div className="flex items-center gap-2">
+                            <label className="font-bold text-gray-800 text-lg">{construct.name}</label>
+                            {/* Level 3 Rubric Tooltip */}
+                            <div className="relative">
+                                <i data-lucide="info"
+                                   className="w-4 h-4 text-gray-400 cursor-help hover:text-blue-500"
+                                   onMouseEnter={() => setShowRubric(true)}
+                                   onMouseLeave={() => setShowRubric(false)}
+                                ></i>
+                                {showRubric && (
+                                    <div className="absolute z-10 left-6 top-0 w-64 p-3 bg-gray-900 text-white text-xs rounded shadow-xl">
+                                        <strong>Indicators:</strong><br/>
+                                        {construct.rubric}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        <div className="text-2xl font-bold text-blue-600">{value || 0}</div>
+                    </div>
+
+                    <input
+                        type="range"
+                        min="1"
+                        max="10"
+                        step="0.1"
+                        value={value || 5}
+                        disabled={isLocked}
+                        onChange={(e) => onChange(parseFloat(e.target.value))}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider-thumb accent-blue-600"
+                    />
+
+                    <div className="flex justify-between mt-2">
+                        <span className="text-xs text-gray-400">Developing (1)</span>
+                        <span className="text-xs text-gray-400">Elite (10)</span>
+                    </div>
+
+                    {/* Evidence Attachment Tool (Section 3.1) */}
+                    <div className="mt-3 flex gap-2">
+                        <button onClick={onAttach} className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+                            Add Video Evidence
+                        </button>
+                        <button className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                            Add Note
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- MAIN APP CONTAINER ---
+        const App = () => {
+            const [view, setView] = useState('dashboard'); // dashboard, evaluate, review
+            const [userRole, setUserRole] = useState('coach'); // coach, player
+            const [selectedPlayer, setSelectedPlayer] = useState(MOCK_ROSTER[0]);
+
+            // Mock State for Inputs
+            const [inputScores, setInputScores] = useState({
+                dist: 7.5, rec: 8.0, elim: 6.5,
+                off_pos: 7.0, def_pos: 6.0,
+                sprint: 4.1, yo_yo: 19
+            });
+
+            // Calculate Level 1 Parameters based on Level 2 Inputs (Section 2.2)
+            const calculateLevel1 = (paramKey) => {
+                const model = SCORING_MODEL[paramKey];
+                let weightedSum = 0;
+                let totalWeight = 0;
+
+                model.constructs.forEach(c => {
+                    let rawScore = inputScores[c.id] || 0;
+                    // Auto-convert objective data if needed
+                    if(c.type === 'measurement') {
+                        rawScore = c.benchmark(rawScore);
+                    }
+                    weightedSum += rawScore * c.weight;
+                    totalWeight += c.weight;
+                });
+
+                // Normalize just in case weights don't sum to 1.0 perfectly
+                return (weightedSum / totalWeight).toFixed(1);
+            };
+
+            const handleNavigate = (newView, player = null) => {
+                if (player) setSelectedPlayer(player);
+                setView(newView);
+            };
+
+            // Refresh icons when DOM updates
+            useEffect(() => {
+                if (window.lucide) window.lucide.createIcons();
+            }, [view, userRole]);
+
+            // --- VIEWS ---
+
+            // 1. Team Dashboard View
+            const DashboardView = () => (
+                <div className="p-8 max-w-7xl mx-auto">
+                    {/* Macro Triage Header */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                        <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-blue-600">
+                            <h3 className="text-gray-500 text-sm uppercase font-bold tracking-wider">Evaluation Status</h3>
+                            <div className="mt-2 flex items-baseline gap-2">
+                                <span className="text-4xl font-bold text-gray-800">12/24</span>
+                                <span className="text-sm text-yellow-600 font-medium">5 Pending Review</span>
+                            </div>
+                        </div>
+                        <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-green-500">
+                            <h3 className="text-gray-500 text-sm uppercase font-bold tracking-wider">Team Avg Score</h3>
+                            <div className="mt-2 flex items-baseline gap-2">
+                                <span className="text-4xl font-bold text-gray-800">7.4</span>
+                                <span className="text-sm text-green-600 font-medium">↗ +0.3 vs last cycle</span>
+                            </div>
+                        </div>
+                        <div className="bg-gradient-to-r from-blue-900 to-blue-700 p-6 rounded-xl shadow-sm text-white flex items-center justify-between">
+                            <div>
+                                <h3 className="text-blue-100 text-sm uppercase font-bold tracking-wider">Next Match</h3>
+                                <div className="text-2xl font-bold mt-1">vs. Amsterdam HC</div>
+                                <div className="text-sm text-blue-200 mt-1">Saturday, 14:00</div>
+                            </div>
+                            <i data-lucide="calendar" className="w-8 h-8 opacity-50"></i>
+                        </div>
+                    </div>
+
+                    {/* Roster Management */}
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                        <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+                            <h2 className="text-xl font-bold text-gray-800">Roster & Ratings</h2>
+                            <div className="flex gap-2">
+                                <button className="px-3 py-1 text-sm border rounded hover:bg-gray-50">Filter</button>
+                                <button className="px-3 py-1 text-sm border rounded hover:bg-gray-50">Sort</button>
+                            </div>
+                        </div>
+                        <table className="w-full text-left">
+                            <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+                                <tr>
+                                    <th className="px-6 py-4">Player</th>
+                                    <th className="px-6 py-4">Status</th>
+                                    <th className="px-6 py-4">Rating Gap</th>
+                                    <th className="px-6 py-4">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {MOCK_ROSTER.map(player => (
+                                    <tr key={player.id} className="hover:bg-gray-50 transition-colors">
+                                        <td className="px-6 py-4 flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm">
+                                                {player.avatar}
+                                            </div>
+                                            <div>
+                                                <div className="font-semibold text-gray-900">{player.name}</div>
+                                                <div className="text-xs text-gray-500">{player.position}</div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                                ${player.status === 'Completed' ? 'bg-green-100 text-green-800' :
+                                                  player.status === 'Review Pending' ? 'bg-yellow-100 text-yellow-800' :
+                                                  'bg-gray-100 text-gray-800'}`}>
+                                                {player.status}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {player.gap ? (
+                                                <div className="flex items-center gap-2">
+                                                    <div className="h-2 w-16 bg-gray-200 rounded-full overflow-hidden">
+                                                        <div className={`h-full ${player.gap > 0.5 ? 'bg-red-500' : 'bg-green-500'}`} style={{width: `${player.gap * 100}%`}}></div>
+                                                    </div>
+                                                    <span className="text-xs text-gray-600">{player.gap}</span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-xs text-gray-400 italic">Waiting for data</span>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <button
+                                                onClick={() => handleNavigate('evaluate', player)}
+                                                className="text-blue-600 hover:text-blue-900 text-sm font-medium hover:underline"
+                                            >
+                                                Open Eval
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            );
+
+            // 2. Scoring Engine View
+            const EvaluationView = () => {
+                const techScore = calculateLevel1('technical');
+                const tacScore = calculateLevel1('tactical');
+                const physScore = calculateLevel1('physical');
+
+                return (
+                    <div className="flex h-[calc(100vh-64px)]">
+                        {/* Sidebar Summary */}
+                        <div className="w-80 bg-white border-r border-gray-200 p-6 overflow-y-auto hidden lg:block">
+                            <div className="text-center mb-8">
+                                <div className="w-20 h-20 mx-auto bg-blue-100 rounded-full flex items-center justify-center text-2xl font-bold text-blue-700 mb-3">
+                                    {selectedPlayer.avatar}
+                                </div>
+                                <h2 className="text-xl font-bold text-gray-900">{selectedPlayer.name}</h2>
+                                <p className="text-gray-500">{selectedPlayer.position}</p>
+                            </div>
+
+                            {/* Live Calculation Display (Level 1 Outputs) */}
+                            <div className="space-y-4">
+                                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Calculated Parameters</h3>
+                                {[
+                                    { label: 'Technical', score: techScore, color: 'bg-blue-500' },
+                                    { label: 'Game IQ', score: tacScore, color: 'bg-purple-500' },
+                                    { label: 'Athletic', score: physScore, color: 'bg-green-500' }
+                                ].map(item => (
+                                    <div key={item.label} className="bg-gray-50 p-4 rounded-lg">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="text-sm font-medium text-gray-700">{item.label}</span>
+                                            <span className="text-lg font-bold text-gray-900">{item.score}</span>
+                                        </div>
+                                        <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                            <div className={`h-full ${item.color}`} style={{width: `${item.score * 10}%`}}></div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <button
+                                onClick={() => handleNavigate('review')}
+                                className="w-full mt-8 py-3 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 transition-colors flex justify-center items-center gap-2"
+                            >
+                                <i data-lucide="bar-chart-2" className="w-4 h-4"></i>
+                                Comparative Review
+                            </button>
+                        </div>
+
+                        {/* Main Scoring Area */}
+                        <div className="flex-1 bg-gray-50 p-8 overflow-y-auto">
+                            <div className="max-w-3xl mx-auto">
+                                <div className="flex items-center gap-2 mb-6 text-gray-500 text-sm cursor-pointer hover:text-blue-600" onClick={() => handleNavigate('dashboard')}>
+                                    <i data-lucide="arrow-left" className="w-4 h-4"></i> Back to Roster
+                                </div>
+                                <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                                    {userRole === 'coach' ? 'Coach Assessment' : 'Player Self-Reflection'}
+                                </h1>
+                                <p className="text-gray-500 mb-8">
+                                    {userRole === 'coach'
+                                     ? 'Rate the Level 2 constructs below. Level 1 Parameters will calculate automatically.'
+                                     : 'Rate your own performance blindly. You will not see coach scores until the review.'}
+                                </p>
+
+                                {/* Parameter Sections */}
+                                {Object.values(SCORING_MODEL).map(param => (
+                                    <div key={param.id} className="mb-10">
+                                        <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2 border-b pb-2 border-gray-200">
+                                            <span className="w-2 h-6 bg-blue-600 rounded-full"></span>
+                                            {param.name}
+                                            {param.isObjective && <span className="ml-auto text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded">Objective Data Mode</span>}
+                                        </h2>
+                                        {param.constructs.map(construct => (
+                                            <ScoreInput
+                                                key={construct.id}
+                                                construct={construct}
+                                                value={inputScores[construct.id]}
+                                                onChange={(val) => setInputScores({...inputScores, [construct.id]: val})}
+                                                onAttach={() => alert("Mockup: File Picker would open here")}
+                                                isLocked={userRole === 'player' && selectedPlayer.status === 'Completed'}
+                                            />
+                                        ))}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            // 3. Comparative Review (360 Feedback)
+            const ReviewView = () => {
+                // Mock Comparison Data
+                const techScore = calculateLevel1('technical');
+                const tacScore = calculateLevel1('tactical');
+                const physScore = calculateLevel1('physical');
+
+                const coachData = [parseFloat(techScore), parseFloat(tacScore), parseFloat(physScore)];
+                // Simulate a gap for the player data
+                const playerData = [parseFloat(techScore) + 0.5, parseFloat(tacScore) - 1.2, parseFloat(physScore) + 0.2];
+                const labels = ['Technical', 'Tactical', 'Physical'];
+
+                return (
+                    <div className="p-8 max-w-6xl mx-auto">
+                         <div className="flex items-center gap-2 mb-6 text-gray-500 text-sm cursor-pointer hover:text-blue-600" onClick={() => handleNavigate('evaluate')}>
+                            <i data-lucide="arrow-left" className="w-4 h-4"></i> Back to Inputs
+                        </div>
+
+                        <div className="flex justify-between items-center mb-8">
+                            <div>
+                                <h1 className="text-3xl font-bold text-gray-900">Comparative Review</h1>
+                                <p className="text-gray-500">360° Analysis: Coach Assessment vs. Player Perception</p>
+                            </div>
+                            <div className="flex gap-3">
+                                <div className="flex items-center gap-2 px-4 py-2 bg-white rounded shadow-sm">
+                                    <span className="w-3 h-3 bg-blue-600 rounded-full"></span>
+                                    <span className="text-sm font-bold text-gray-700">Coach</span>
+                                </div>
+                                <div className="flex items-center gap-2 px-4 py-2 bg-white rounded shadow-sm">
+                                    <span className="w-3 h-3 bg-gray-400 rounded-full"></span>
+                                    <span className="text-sm font-bold text-gray-700">Player</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                            {/* The Radar Chart */}
+                            <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100 flex flex-col items-center justify-center min-h-[400px]">
+                                <div className="w-full h-full relative">
+                                    <RadarChart coachScores={coachData} playerScores={playerData} labels={labels} />
+                                </div>
+                            </div>
+
+                            {/* Gap Analysis & Evidence */}
+                            <div className="space-y-6">
+                                <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+                                    <h3 className="font-bold text-gray-800 mb-4">Gap Analysis Details</h3>
+                                    <div className="space-y-4">
+                                        <div className="p-4 bg-red-50 rounded-lg border border-red-100">
+                                            <div className="flex justify-between mb-1">
+                                                <span className="font-bold text-red-800">Game Intelligence Gap</span>
+                                                <span className="font-bold text-red-600 text-lg">-1.2</span>
+                                            </div>
+                                            <p className="text-sm text-red-700 mb-3">
+                                                Coach rated <strong>{tacScore}</strong>, Player rated <strong>{(parseFloat(tacScore)-1.2).toFixed(1)}</strong>.
+                                                Major discrepancy in "Defensive Structure".
+                                            </p>
+                                            {/* Linked Evidence */}
+                                            <div className="bg-white p-2 rounded border border-red-200 flex items-center gap-3 cursor-pointer hover:bg-gray-50">
+                                                <div className="bg-gray-900 text-white p-2 rounded">
+                                                    <i data-lucide="play-circle" className="w-5 h-5"></i>
+                                                </div>
+                                                <div>
+                                                    <div className="text-xs font-bold text-gray-900">Clip: Q3 Defensive Breakdown</div>
+                                                    <div className="text-xs text-gray-500">Attached by Coach • 00:14s</div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="p-4 bg-green-50 rounded-lg border border-green-100">
+                                             <div className="flex justify-between mb-1">
+                                                <span className="font-bold text-green-800">Technical Alignment</span>
+                                                <span className="font-bold text-green-600 text-lg">+0.5</span>
+                                            </div>
+                                            <p className="text-sm text-green-700">
+                                                Strong alignment. Both agree Elimination Skills are developing well.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            // --- APP LAYOUT RENDER ---
+            return (
+                <div className="min-h-screen flex flex-col">
+                    {/* Header */}
+                    <header className="h-16 bg-[#0f172a] text-white flex items-center justify-between px-6 shadow-md z-20">
+                        <div className="flex items-center gap-3">
+                            <i data-lucide="activity" className="text-blue-400 w-6 h-6"></i>
+                            <span className="font-bold text-xl tracking-tight">HockeySense AI</span>
+                        </div>
+
+                        {/* Mock User Switcher for Demo Purposes */}
+                        <div className="flex items-center gap-4">
+                            <div className="flex bg-gray-800 rounded-lg p-1">
+                                <button
+                                    onClick={() => setUserRole('coach')}
+                                    className={`px-3 py-1 text-xs rounded font-medium transition-all ${userRole === 'coach' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                                >
+                                    Coach View
+                                </button>
+                                <button
+                                    onClick={() => setUserRole('player')}
+                                    className={`px-3 py-1 text-xs rounded font-medium transition-all ${userRole === 'player' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                                >
+                                    Player View
+                                </button>
+                            </div>
+                            <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center font-bold text-xs">
+                                {userRole === 'coach' ? 'CO' : 'PL'}
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* Body */}
+                    <main className="flex-1 relative">
+                        {view === 'dashboard' && <DashboardView />}
+                        {view === 'evaluate' && <EvaluationView />}
+                        {view === 'review' && <ReviewView />}
+                    </main>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

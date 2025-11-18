@@ -1,0 +1,299 @@
+/* Slider Component */
+.score-slider {
+    margin-bottom: 24px;
+}
+
+.score-slider-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 12px;
+}
+
+.score-slider-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.score-slider-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.score-slider-value {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--primary-color);
+}
+
+.score-slider-input {
+    width: 100%;
+    height: 8px;
+    border-radius: 4px;
+    background: var(--border-color);
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.score-slider-input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    background: var(--primary-color);
+    cursor: pointer;
+    border-radius: 50%;
+    box-shadow: var(--shadow-sm);
+}
+
+.score-slider-input::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    background: var(--primary-color);
+    cursor: pointer;
+    border-radius: 50%;
+    border: none;
+    box-shadow: var(--shadow-sm);
+}
+
+.score-slider-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+/* Measurement Input (for Objective Data) */
+.measurement-input {
+    margin-bottom: 24px;
+    padding: 16px;
+    background: var(--surface);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.measurement-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.measurement-label {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.measurement-calculated {
+    font-size: 14px;
+    font-family: monospace;
+    background: #dbeafe;
+    color: #1e40af;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.measurement-field {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.measurement-input-field {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.measurement-input-field:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.measurement-hint {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+/* Info Tooltip */
+.info-icon {
+    width: 16px;
+    height: 16px;
+    color: var(--text-secondary);
+    cursor: help;
+    position: relative;
+}
+
+.info-icon:hover {
+    color: var(--primary-color);
+}
+
+.tooltip {
+    position: absolute;
+    left: 24px;
+    top: 0;
+    width: 256px;
+    padding: 12px;
+    background: #1f2937;
+    color: white;
+    font-size: 12px;
+    border-radius: 6px;
+    box-shadow: var(--shadow-lg);
+    z-index: 1000;
+    display: none;
+}
+
+.tooltip.show {
+    display: block;
+}
+
+.tooltip strong {
+    display: block;
+    margin-bottom: 4px;
+}
+
+/* Evidence Attachment */
+.evidence-actions {
+    margin-top: 12px;
+    display: flex;
+    gap: 12px;
+}
+
+.evidence-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px 0;
+    transition: color 0.2s;
+}
+
+.evidence-btn:hover {
+    color: var(--primary-color);
+}
+
+.evidence-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* Status Badge */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 9999px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.status-badge.completed {
+    background-color: #d1fae5;
+    color: #065f46;
+}
+
+.status-badge.pending {
+    background-color: #fef3c7;
+    color: #92400e;
+}
+
+.status-badge.needed {
+    background-color: #f3f4f6;
+    color: #374151;
+}
+
+/* Gap Indicator */
+.gap-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.gap-bar {
+    height: 8px;
+    width: 64px;
+    background: var(--border-color);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.gap-bar-fill {
+    height: 100%;
+    transition: width 0.3s;
+}
+
+.gap-bar-fill.high {
+    background-color: var(--danger-color);
+}
+
+.gap-bar-fill.low {
+    background-color: var(--success-color);
+}
+
+.gap-value {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+/* Parameter Score Card */
+.parameter-card {
+    background: #f9fafb;
+    padding: 16px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+
+.parameter-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.parameter-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.parameter-score {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.parameter-bar {
+    height: 6px;
+    background: var(--border-color);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.parameter-bar-fill {
+    height: 100%;
+    transition: width 0.3s;
+}
+
+.parameter-bar-fill.blue {
+    background-color: var(--primary-color);
+}
+
+.parameter-bar-fill.purple {
+    background-color: #9333ea;
+}
+
+.parameter-bar-fill.green {
+    background-color: var(--success-color);
+}
+
