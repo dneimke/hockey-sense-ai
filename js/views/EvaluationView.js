@@ -6,6 +6,7 @@
 import { appState } from '../models/dataModel.js';
 import { SCORING_MODEL, calculateParameterScore } from '../models/scoringModel.js';
 import { ScoreInput } from '../components/ScoreInput.js';
+import { RadarChart } from '../components/RadarChart.js';
 
 export class EvaluationView {
     constructor(container) {
@@ -17,6 +18,8 @@ export class EvaluationView {
         this.currentParameterId = null;
         this.unsavedChanges = false;
         this.savedScores = JSON.parse(JSON.stringify(this.constructScores)); // Deep copy for comparison
+        this.radarChart = null;
+        this.expandedParameters = new Set(); // Track which parameters are expanded
         this.render();
     }
 
@@ -32,68 +35,415 @@ export class EvaluationView {
                         <div class="evaluation-sidebar-avatar">${this.player.avatar}</div>
                         <div class="evaluation-sidebar-name">${this.player.name}</div>
                         <div class="evaluation-sidebar-position">${this.player.position}</div>
+                        ${this.player.jerseyNumber ? `<div class="evaluation-sidebar-jersey">#${this.player.jerseyNumber}</div>` : ''}
+                        ${this.player.age ? `<div class="evaluation-sidebar-age">Age: ${this.player.age}</div>` : ''}
                     </div>
 
-                    <div style="margin-bottom: 24px;">
-                        <h3 style="font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #9ca3af; margin-bottom: 16px;">
-                            Calculated Parameters
-                        </h3>
-                        <div id="parameter-scores-container"></div>
+                    <div class="evaluation-sidebar-navigation">
+                        <button id="back-to-roster-btn" class="btn btn-secondary" style="width: 100%; margin-bottom: 12px;">
+                            <svg style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="15 18 9 12 15 6"/>
+                            </svg>
+                            Back to Roster
+                        </button>
+                        <button id="historical-reports-btn" class="btn btn-secondary" style="width: 100%;" disabled>
+                            <svg style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <polyline points="14 2 14 8 20 8"/>
+                                <line x1="16" y1="13" x2="8" y2="13"/>
+                                <line x1="16" y1="17" x2="8" y2="17"/>
+                                <polyline points="10 9 9 9 8 9"/>
+                            </svg>
+                            Historical Reports
+                        </button>
                     </div>
-
-                    <button id="review-btn" class="btn btn-primary" style="width: 100%; margin-top: 32px;">
-                        <svg style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="22 6 13.5 15.5 8.5 10.5 2 17"/>
-                            <polyline points="16 6 22 6 22 12"/>
-                        </svg>
-                        Comparative Review
-                    </button>
                 </div>
 
-                <!-- Main Content Area -->
+                <!-- Main Content Area - Split Screen -->
                 <div class="evaluation-content" id="evaluation-main-content">
-                    <!-- Content will be rendered based on currentView -->
+                    <div class="evaluation-split-view">
+                        <!-- Left Column: Parameter Accordion List -->
+                        <div class="evaluation-left-col" id="evaluation-left-col">
+                            <div class="evaluation-content-inner">
+                                <h1 class="evaluation-title">
+                                    ${appState.currentUser === 'player' ? 'Player Self-Reflection' : 'Coach Assessment'}
+                                </h1>
+                                <p class="evaluation-subtitle">
+                                    ${appState.currentUser === 'player' 
+                                        ? 'Expand parameters to rate your performance.'
+                                        : 'Expand parameters to begin assessment. Level 1 Parameters calculate automatically from Level 2 constructs.'}
+                                </p>
+                                <div id="parameter-accordion-container"></div>
+                            </div>
+                        </div>
+
+                        <!-- Right Column: Sticky Radar Chart & Gap Analysis -->
+                        <div class="evaluation-right-col" id="evaluation-right-col">
+                            <div class="evaluation-right-panel">
+                                <div id="radar-chart-container"></div>
+                                <div id="gap-analysis-container"></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         `;
 
-        this.renderParameterScores();
-        if (this.currentView === 'overview') {
-            this.renderParameterOverview();
-        } else if (this.currentView === 'parameterDetail') {
-            this.renderParameterDetail(this.currentParameterId);
-        }
+        this.renderUnifiedView();
         this.attachEventListeners();
     }
 
-    renderParameterScores() {
-        const container = this.container.querySelector('#parameter-scores-container');
+    renderUnifiedView() {
+        this.renderAccordionParameterList();
+        this.renderRightPanel();
+    }
+
+    renderAccordionParameterList() {
+        const container = this.container.querySelector('#parameter-accordion-container');
         if (!container) return;
-        
+
+        const isPlayer = appState.currentUser === 'player';
         const parameters = Object.values(SCORING_MODEL);
+
+        // Calculate gaps for comparison
+        const coachScores = this.player.getConstructScores('coach') || {};
+        const playerScores = this.player.getConstructScores('player') || {};
         
+        const coachParamScores = {};
+        const playerParamScores = {};
+        Object.keys(SCORING_MODEL).forEach(paramId => {
+            coachParamScores[paramId] = calculateParameterScore(paramId, coachScores);
+            playerParamScores[paramId] = calculateParameterScore(paramId, playerScores);
+        });
+
         container.innerHTML = parameters.map(param => {
             const score = calculateParameterScore(param.id, this.constructScores);
-            const isActive = this.currentView === 'parameterDetail' && this.currentParameterId === param.id;
+            const isExpanded = this.expandedParameters.has(param.id);
+            
+            // Calculate gap (only if both coach and player have scores)
+            let gap = null;
+            let gapValue = null;
+            if (!isPlayer && coachParamScores[param.id] !== undefined && playerParamScores[param.id] !== undefined) {
+                gapValue = coachParamScores[param.id] - playerParamScores[param.id];
+                gap = Math.abs(gapValue);
+            }
+
+            // Gap indicator class
+            let gapIndicatorClass = '';
+            let gapIndicatorText = '';
+            if (gap !== null) {
+                if (gap > 2) {
+                    gapIndicatorClass = 'warning';
+                    gapIndicatorText = `${gapValue > 0 ? '+' : ''}${gapValue.toFixed(1)}`;
+                } else if (gap > 1) {
+                    gapIndicatorClass = 'moderate';
+                    gapIndicatorText = `${gapValue > 0 ? '+' : ''}${gapValue.toFixed(1)}`;
+                } else {
+                    gapIndicatorClass = 'low';
+                    gapIndicatorText = `${gapValue > 0 ? '+' : ''}${gapValue.toFixed(1)}`;
+                }
+            }
+
+            const expandedContent = isExpanded ? this.renderParameterConstructs(param) : '';
 
             return `
-                <div class="parameter-nav-item ${isActive ? 'active' : ''}" data-parameter-id="${param.id}">
-                    <div class="parameter-nav-indicator"></div>
-                    <div class="parameter-nav-content">
-                        <div class="parameter-nav-name">${param.name}</div>
-                        <div class="parameter-nav-score">${score.toFixed(1)}</div>
+                <div class="parameter-accordion-row ${isExpanded ? 'expanded' : 'collapsed'}" data-parameter-id="${param.id}">
+                    <div class="parameter-accordion-header" data-parameter-id="${param.id}">
+                        <div class="parameter-accordion-header-left">
+                            <svg class="parameter-accordion-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="6 9 12 15 18 9"/>
+                            </svg>
+                            <div class="parameter-accordion-name">${param.name}</div>
+                        </div>
+                        <div class="parameter-accordion-header-right">
+                            ${gap !== null ? `
+                                <div class="gap-indicator ${gapIndicatorClass}">
+                                    ${gap > 2 ? '<svg style="width: 14px; height: 14px; margin-right: 4px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' : ''}
+                                    <span>${gapIndicatorText}</span>
+                                </div>
+                            ` : ''}
+                            <div class="parameter-accordion-score">${score.toFixed(1)}</div>
+                        </div>
                     </div>
+                    ${expandedContent ? `<div class="parameter-accordion-content">${expandedContent}</div>` : ''}
                 </div>
             `;
         }).join('');
 
-        // Make sidebar navigation items clickable
-        container.querySelectorAll('.parameter-nav-item').forEach(item => {
-            item.addEventListener('click', (e) => {
+        // Attach accordion toggle handlers
+        container.querySelectorAll('.parameter-accordion-header').forEach(header => {
+            header.addEventListener('click', (e) => {
                 const paramId = e.currentTarget.dataset.parameterId;
-                this.navigateToParameter(paramId);
+                this.toggleParameterAccordion(paramId);
             });
         });
+
+        // Attach slider handlers
+        container.querySelectorAll('.construct-score-slider').forEach(slider => {
+            slider.addEventListener('input', (e) => {
+                const constructId = e.target.dataset.constructId;
+                const value = parseFloat(e.target.value) || 0;
+                const display = e.target.closest('.construct-score-slider-wrapper').querySelector('.construct-score-display');
+                if (display) {
+                    display.textContent = value.toFixed(1);
+                }
+                this.handleScoreChange(constructId, value);
+            });
+        });
+
+        // Attach evidence button handlers
+        const isLocked = isPlayer && this.player.status === 'Completed';
+        container.querySelectorAll('.evidence-button').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                if (!isLocked) {
+                    e.stopPropagation();
+                    const constructId = e.currentTarget.dataset.constructId;
+                    this.showEvidenceDialog(constructId);
+                }
+            });
+        });
+    }
+
+    renderParameterConstructs(parameter) {
+        const isPlayer = appState.currentUser === 'player';
+        const isLocked = isPlayer && this.player.status === 'Completed';
+        const score = calculateParameterScore(parameter.id, this.constructScores);
+        const constructCount = parameter.constructs.length;
+        
+        const firstWeight = parameter.constructs[0].weight;
+        const allEqual = parameter.constructs.every(c => c.weight === firstWeight);
+        const weightPercent = allEqual ? (firstWeight * 100).toFixed(0) : 'varies';
+
+        return `
+            <div class="parameter-constructs-header">
+                <div class="parameter-constructs-title">Assessment Breakdown</div>
+                <div class="parameter-constructs-weighting">
+                    ${constructCount} Factors${weightPercent !== 'varies' ? ` (${weightPercent}% Weight each)` : ' (Weighted)'}
+                </div>
+            </div>
+            <div class="construct-rows">
+                ${parameter.constructs.map(construct => {
+                    const constructScore = this.constructScores[construct.id] || 0;
+                    const contribution = (constructScore / 10) * construct.weight * 10;
+                    const evidenceCount = 0; // TODO: Get from evidence system
+                    const weightPercent = (construct.weight * 100).toFixed(1);
+                    
+                    return `
+                        <div class="construct-row" data-construct-id="${construct.id}">
+                            <div class="construct-row-left">
+                                <div class="construct-name-wrapper">
+                                    <div class="construct-name">${construct.name}</div>
+                                    <div class="construct-weighting">${weightPercent}% Weight</div>
+                                </div>
+                                <div class="construct-contribution">
+                                    <span class="construct-contribution-label">CONTRIBUTION</span>
+                                    <span class="construct-contribution-value">+${contribution.toFixed(2)} pts</span>
+                                </div>
+                            </div>
+                            <div class="construct-row-right">
+                                <button class="evidence-button ${evidenceCount > 0 ? 'has-evidence' : ''}" 
+                                        data-construct-id="${construct.id}"
+                                        ${isLocked ? 'disabled' : ''}>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+                                        <circle cx="12" cy="13" r="3"/>
+                                    </svg>
+                                    ${evidenceCount > 0 ? `${evidenceCount} Clips` : 'Add Evidence'}
+                                </button>
+                                <div class="construct-score-slider-wrapper">
+                                    <div class="construct-score-slider-header">
+                                        <span class="construct-score-display">${constructScore.toFixed(1)}</span>
+                                    </div>
+                                    <input type="range" 
+                                           min="1" 
+                                           max="10" 
+                                           step="0.1"
+                                           value="${constructScore || 5}" 
+                                           class="construct-score-slider"
+                                           data-construct-id="${construct.id}"
+                                           ${isLocked ? 'disabled' : ''}>
+                                    <div class="construct-score-slider-labels">
+                                        <span>1</span>
+                                        <span>10</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    }
+
+    toggleParameterAccordion(parameterId) {
+        if (this.expandedParameters.has(parameterId)) {
+            this.expandedParameters.delete(parameterId);
+        } else {
+            this.expandedParameters.add(parameterId);
+        }
+        this.renderAccordionParameterList();
+    }
+
+    renderRightPanel() {
+        this.renderRadarChart();
+        this.renderGapAnalysis();
+    }
+
+    renderRadarChart() {
+        const container = this.container.querySelector('#radar-chart-container');
+        if (!container) return;
+
+        const coachScores = this.player.getConstructScores('coach') || {};
+        const playerScores = this.player.getConstructScores('player') || {};
+
+        // Calculate parameter scores
+        const coachParamScores = {};
+        const playerParamScores = {};
+        const labels = [];
+
+        Object.keys(SCORING_MODEL).forEach(paramId => {
+            const param = SCORING_MODEL[paramId];
+            labels.push(param.name);
+            coachParamScores[paramId] = calculateParameterScore(paramId, coachScores);
+            playerParamScores[paramId] = calculateParameterScore(paramId, playerScores);
+        });
+
+        const coachData = Object.values(coachParamScores);
+        const playerData = Object.values(playerParamScores);
+
+        // Destroy existing chart if it exists
+        if (this.radarChart) {
+            this.radarChart.destroy();
+        }
+
+        // Create new chart
+        this.radarChart = new RadarChart(container, {
+            coachScores: coachData,
+            playerScores: playerData,
+            labels: labels
+        });
+    }
+
+    updateRadarChart() {
+        const coachScores = this.player.getConstructScores('coach') || {};
+        const playerScores = this.player.getConstructScores('player') || {};
+
+        const coachParamScores = {};
+        const playerParamScores = {};
+        const labels = [];
+
+        Object.keys(SCORING_MODEL).forEach(paramId => {
+            const param = SCORING_MODEL[paramId];
+            labels.push(param.name);
+            coachParamScores[paramId] = calculateParameterScore(paramId, coachScores);
+            playerParamScores[paramId] = calculateParameterScore(paramId, playerScores);
+        });
+
+        const coachData = Object.values(coachParamScores);
+        const playerData = Object.values(playerParamScores);
+
+        if (this.radarChart) {
+            this.radarChart.update(coachData, playerData, labels);
+        } else {
+            this.renderRadarChart();
+        }
+
+        // Also update gap analysis
+        this.renderGapAnalysis();
+    }
+
+    renderGapAnalysis() {
+        const container = this.container.querySelector('#gap-analysis-container');
+        if (!container) return;
+
+        const isPlayer = appState.currentUser === 'player';
+        if (isPlayer) {
+            container.innerHTML = `
+                <div class="gap-analysis-card">
+                    <h3 class="gap-analysis-title">Top Discrepancies</h3>
+                    <p class="gap-analysis-subtitle">View will be available after coach completes assessment.</p>
+                </div>
+            `;
+            return;
+        }
+
+        const coachScores = this.player.getConstructScores('coach') || {};
+        const playerScores = this.player.getConstructScores('player') || {};
+
+        const coachParamScores = {};
+        const playerParamScores = {};
+
+        Object.keys(SCORING_MODEL).forEach(paramId => {
+            coachParamScores[paramId] = calculateParameterScore(paramId, coachScores);
+            playerParamScores[paramId] = calculateParameterScore(paramId, playerScores);
+        });
+
+        const gaps = [];
+
+        Object.keys(SCORING_MODEL).forEach(paramId => {
+            const coachScore = coachParamScores[paramId] || 0;
+            const playerScore = playerParamScores[paramId] || 0;
+            const gap = coachScore - playerScore;
+            const absGap = Math.abs(gap);
+
+            if (absGap > 0.1) {
+                gaps.push({
+                    paramId,
+                    paramName: SCORING_MODEL[paramId].name,
+                    coachScore,
+                    playerScore,
+                    gap,
+                    absGap
+                });
+            }
+        });
+
+        // Sort by absolute gap (largest first) and take top 5
+        gaps.sort((a, b) => b.absGap - a.absGap);
+        const topGaps = gaps.slice(0, 5);
+
+        if (topGaps.length === 0) {
+            container.innerHTML = `
+                <div class="gap-analysis-card">
+                    <h3 class="gap-analysis-title">Top Discrepancies</h3>
+                    <div class="gap-item low">
+                        <div class="gap-item-header">
+                            <span class="gap-item-label">Strong Alignment</span>
+                            <span class="gap-item-value">✓</span>
+                        </div>
+                        <p class="gap-item-description">
+                            Coach and player assessments are well-aligned across all parameters.
+                        </p>
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="gap-analysis-card">
+                <h3 class="gap-analysis-title">Top Discrepancies</h3>
+                <div id="gap-analysis-items">
+                    ${topGaps.map(gap => {
+                        const isHighGap = gap.absGap > 2;
+                        const gapClass = isHighGap ? 'high' : gap.absGap > 1 ? 'moderate' : 'low';
+                        const gapSign = gap.gap > 0 ? '+' : '';
+                        return `
+                            <div class="gap-item ${gapClass}">
+                                <div class="gap-item-header">
+                                    <span class="gap-item-label">${gap.paramName}</span>
+                                    <span class="gap-item-value">${gapSign}${gap.gap.toFixed(1)}</span>
+                                </div>
+                                <p class="gap-item-description">
+                                    Coach: <strong>${gap.coachScore.toFixed(1)}</strong>, 
+                                    Player: <strong>${gap.playerScore.toFixed(1)}</strong>
+                                </p>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
     }
 
     renderParameterOverview() {
@@ -397,13 +747,9 @@ export class EvaluationView {
             this.player.updateParameterScore(appState.currentUser, paramId, paramScore);
         });
 
-        // Update sidebar display
-        this.renderParameterScores();
-
-        // If in detail view, update the contribution display and progress bars
-        if (this.currentView === 'parameterDetail' && this.currentParameterId) {
-            this.updateParameterDetailView();
-        }
+        // Update accordion list and radar chart in real-time
+        this.renderAccordionParameterList();
+        this.updateRadarChart();
     }
 
     updateParameterDetailView() {
@@ -482,25 +828,12 @@ export class EvaluationView {
         this.unsavedChanges = false;
         this.updateSaveDiscardButtons();
         
-        // Re-render current view to show reverted values
-        if (this.currentView === 'parameterDetail') {
-            this.renderParameterDetail(this.currentParameterId);
-        } else {
-            this.renderParameterOverview();
-        }
-        this.renderParameterScores();
+        // Re-render unified view to show reverted values
+        this.renderUnifiedView();
     }
 
     updateSaveDiscardButtons() {
-        const saveBtn = this.container.querySelector('#btn-save');
-        const discardBtn = this.container.querySelector('#btn-discard');
-        
-        if (saveBtn) {
-            saveBtn.disabled = !this.unsavedChanges;
-        }
-        if (discardBtn) {
-            discardBtn.disabled = !this.unsavedChanges;
-        }
+        // Buttons removed in unified view, but keeping method for compatibility
     }
 
     showEvidenceDialog(constructId) {
@@ -625,9 +958,9 @@ export class EvaluationView {
     }
 
     attachEventListeners() {
-        const backLink = this.container.querySelector('#back-link');
-        if (backLink) {
-            backLink.addEventListener('click', () => {
+        const backToRosterBtn = this.container.querySelector('#back-to-roster-btn');
+        if (backToRosterBtn) {
+            backToRosterBtn.addEventListener('click', () => {
                 if (this.unsavedChanges) {
                     if (!confirm('You have unsaved changes. Do you want to discard them and leave?')) {
                         return;
@@ -640,44 +973,12 @@ export class EvaluationView {
                 }));
             });
         }
+    }
 
-        const parameterDetailBack = this.container.querySelector('#parameter-detail-back');
-        if (parameterDetailBack) {
-            parameterDetailBack.addEventListener('click', () => {
-                this.navigateToOverview();
-            });
-        }
-
-        const saveBtn = this.container.querySelector('#btn-save');
-        if (saveBtn) {
-            saveBtn.addEventListener('click', () => {
-                this.saveChanges();
-            });
-        }
-
-        const discardBtn = this.container.querySelector('#btn-discard');
-        if (discardBtn) {
-            discardBtn.addEventListener('click', () => {
-                if (confirm('Are you sure you want to discard all unsaved changes?')) {
-                    this.discardChanges();
-                }
-            });
-        }
-
-        const reviewBtn = this.container.querySelector('#review-btn');
-        if (reviewBtn) {
-            reviewBtn.addEventListener('click', () => {
-                if (this.unsavedChanges) {
-                    if (!confirm('You have unsaved changes. Do you want to save them before viewing the review?')) {
-                        return;
-                    }
-                    this.saveChanges();
-                }
-                appState.currentView = 'review';
-                window.dispatchEvent(new CustomEvent('view-change', { 
-                    detail: { view: 'review' } 
-                }));
-            });
+    destroy() {
+        if (this.radarChart) {
+            this.radarChart.destroy();
+            this.radarChart = null;
         }
     }
 }

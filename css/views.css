@@ -221,65 +221,156 @@
     font-size: 14px;
 }
 
-/* Compact Parameter Navigation */
-.parameter-nav-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: background-color 0.2s;
-    margin-bottom: 4px;
-}
-
-.parameter-nav-item:hover {
-    background: #f3f4f6;
-}
-
-.parameter-nav-item.active {
-    background: #dbeafe;
+.evaluation-sidebar-jersey {
+    color: var(--text-secondary);
+    font-size: 14px;
     font-weight: 600;
+    margin-top: 4px;
 }
 
-.parameter-nav-item.active .parameter-nav-indicator {
-    background: var(--primary-color);
-    width: 4px;
+.evaluation-sidebar-age {
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin-top: 4px;
 }
 
-.parameter-nav-indicator {
-    width: 4px;
-    height: 32px;
-    border-radius: 2px;
-    flex-shrink: 0;
-    background: transparent;
+.evaluation-sidebar-navigation {
+    margin-top: 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Parameter Accordion Styles */
+.parameter-accordion-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 24px;
+}
+
+.parameter-accordion-row {
+    background: var(--surface);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    overflow: hidden;
     transition: all 0.2s;
 }
 
-.parameter-nav-content {
-    flex: 1;
+.parameter-accordion-row:hover {
+    box-shadow: var(--shadow-sm);
+}
+
+.parameter-accordion-row.expanded {
+    box-shadow: var(--shadow-md);
+}
+
+.parameter-accordion-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    padding: 16px 20px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.parameter-accordion-header:hover {
+    background: #f9fafb;
+}
+
+.parameter-accordion-header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
     min-width: 0;
 }
 
-.parameter-nav-name {
-    font-size: 13px;
+.parameter-accordion-chevron {
+    width: 20px;
+    height: 20px;
+    color: var(--text-secondary);
+    transition: transform 0.2s;
+    flex-shrink: 0;
+}
+
+.parameter-accordion-row.expanded .parameter-accordion-chevron {
+    transform: rotate(180deg);
+}
+
+.parameter-accordion-name {
+    font-size: 16px;
+    font-weight: 600;
     color: var(--text-primary);
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
+}
+
+.parameter-accordion-header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.parameter-accordion-score {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    min-width: 50px;
+    text-align: right;
+}
+
+.gap-indicator {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 600;
     white-space: nowrap;
 }
 
-.parameter-nav-score {
-    font-size: 14px;
+.gap-indicator.warning {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+}
+
+.gap-indicator.moderate {
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fde68a;
+}
+
+.gap-indicator.low {
+    background: #d1fae5;
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+}
+
+.parameter-accordion-content {
+    padding: 0 20px 20px 20px;
+    border-top: 1px solid var(--border-color);
+    background: #f9fafb;
+}
+
+.parameter-constructs-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-top: 20px;
+}
+
+.parameter-constructs-title {
+    font-size: 18px;
     font-weight: 700;
     color: var(--text-primary);
-    margin-left: 8px;
-    flex-shrink: 0;
+}
+
+.parameter-constructs-weighting {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
 }
 
 .evaluation-content {
@@ -290,8 +381,50 @@
 }
 
 .evaluation-content-inner {
-    max-width: 800px;
-    margin: 0 auto;
+    max-width: 100%;
+    margin: 0;
+}
+
+.evaluation-split-view {
+    display: grid;
+    grid-template-columns: 60% 40%;
+    gap: 32px;
+    height: 100%;
+}
+
+.evaluation-left-col {
+    overflow-y: auto;
+    padding-right: 16px;
+}
+
+.evaluation-right-col {
+    position: relative;
+}
+
+.evaluation-right-panel {
+    position: sticky;
+    top: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    max-height: calc(100vh - 128px);
+    overflow-y: auto;
+}
+
+#radar-chart-container {
+    background: var(--surface);
+    padding: 24px;
+    border-radius: 12px;
+    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--border-color);
+    min-height: 400px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#gap-analysis-container {
+    flex-shrink: 0;
 }
 
 .back-link {
@@ -465,6 +598,11 @@
     border: 1px solid #fecaca;
 }
 
+.gap-item.moderate {
+    background: #fef3c7;
+    border: 1px solid #fde68a;
+}
+
 .gap-item.low {
     background: #d1fae5;
     border: 1px solid #a7f3d0;
@@ -484,6 +622,10 @@
 
 .gap-item.high .gap-item-label {
     color: #991b1b;
+}
+
+.gap-item.moderate .gap-item-label {
+    color: #92400e;
 }
 
 .gap-item.low .gap-item-label {
@@ -512,8 +654,18 @@
     color: #7f1d1d;
 }
 
+.gap-item.moderate .gap-item-description {
+    color: #78350f;
+}
+
 .gap-item.low .gap-item-description {
     color: #064e3b;
+}
+
+.gap-analysis-subtitle {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-top: 8px;
 }
 
 .evidence-link {
@@ -1300,6 +1452,16 @@
         border-bottom: 1px solid var(--border-color);
     }
 
+    .evaluation-split-view {
+        grid-template-columns: 1fr;
+        gap: 24px;
+    }
+
+    .evaluation-right-panel {
+        position: relative;
+        max-height: none;
+    }
+
     .parameter-overview-table-container {
         overflow-x: auto;
     }
@@ -1347,6 +1509,36 @@
     .roster-table th,
     .roster-table td {
         padding: 12px;
+    }
+
+    .evaluation-content {
+        padding: 16px;
+    }
+
+    .evaluation-split-view {
+        gap: 16px;
+    }
+
+    .parameter-accordion-header {
+        padding: 12px 16px;
+    }
+
+    .parameter-accordion-name {
+        font-size: 14px;
+    }
+
+    .parameter-accordion-score {
+        font-size: 16px;
+    }
+
+    .gap-indicator {
+        font-size: 12px;
+        padding: 3px 8px;
+    }
+
+    #radar-chart-container {
+        min-height: 300px;
+        padding: 16px;
     }
 
     .parameter-overview-table th,
