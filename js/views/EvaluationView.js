@@ -118,39 +118,64 @@ export class EvaluationView {
                         : 'Select a parameter to begin assessment. Level 1 Parameters calculate automatically from Level 2 constructs.'}
                 </p>
 
-                <div class="parameter-overview-grid">
-                    ${parameters.map(param => {
-                        const score = calculateParameterScore(param.id, this.constructScores);
-                        const constructCount = param.constructs.length;
-                        const firstWeight = param.constructs[0].weight;
-                        const allEqual = param.constructs.every(c => c.weight === firstWeight);
-                        const avgWeight = allEqual ? (firstWeight * 100).toFixed(0) : 'varies';
+                <div class="parameter-overview-table-container">
+                    <table class="parameter-overview-table">
+                        <thead>
+                            <tr>
+                                <th class="col-parameter">Parameter</th>
+                                <th class="col-score">Score</th>
+                                <th class="col-progress">Progress</th>
+                                <th class="col-factors">Factors</th>
+                                <th class="col-action"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${parameters.map(param => {
+                                const score = calculateParameterScore(param.id, this.constructScores);
+                                const constructCount = param.constructs.length;
+                                const firstWeight = param.constructs[0].weight;
+                                const allEqual = param.constructs.every(c => c.weight === firstWeight);
+                                const avgWeight = allEqual ? (firstWeight * 100).toFixed(0) : 'varies';
+                                const isActive = this.currentView === 'parameterDetail' && this.currentParameterId === param.id;
 
-                        return `
-                            <div class="parameter-overview-card" data-parameter-id="${param.id}">
-                                <div class="parameter-overview-header">
-                                    <h3 class="parameter-overview-title">${param.name}</h3>
-                                    <div class="parameter-overview-score">
-                                        <span class="parameter-overview-score-value">${score.toFixed(1)}</span>
-                                        <span class="parameter-overview-score-max">/10</span>
-                                    </div>
-                                </div>
-                                <div class="parameter-overview-bar">
-                                    <div class="parameter-overview-bar-fill blue" style="width: ${score * 10}%"></div>
-                                </div>
-                                <div class="parameter-overview-meta">
-                                    ${constructCount} factors${avgWeight !== 'varies' ? ` • ${avgWeight}% weight each` : ' • Weighted'}
-                                </div>
-                            </div>
-                        `;
-                    }).join('')}
+                                return `
+                                    <tr class="parameter-table-row ${isActive ? 'active' : ''}" data-parameter-id="${param.id}">
+                                        <td class="col-parameter">
+                                            <div class="parameter-table-name">${param.name}</div>
+                                        </td>
+                                        <td class="col-score">
+                                            <div class="parameter-table-score">
+                                                <span class="parameter-table-score-value">${score.toFixed(1)}</span>
+                                                <span class="parameter-table-score-max">/10</span>
+                                            </div>
+                                        </td>
+                                        <td class="col-progress">
+                                            <div class="parameter-table-progress-bar">
+                                                <div class="parameter-table-progress-fill blue" style="width: ${score * 10}%"></div>
+                                            </div>
+                                        </td>
+                                        <td class="col-factors">
+                                            <div class="parameter-table-factors">
+                                                ${constructCount} factors${avgWeight !== 'varies' ? ` • ${avgWeight}% each` : ' • Weighted'}
+                                            </div>
+                                        </td>
+                                        <td class="col-action">
+                                            <svg class="parameter-table-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <polyline points="9 18 15 12 9 6"/>
+                                            </svg>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         `;
 
-        // Make cards clickable
-        container.querySelectorAll('.parameter-overview-card').forEach(card => {
-            card.addEventListener('click', (e) => {
+        // Make table rows clickable
+        container.querySelectorAll('.parameter-table-row').forEach(row => {
+            row.addEventListener('click', (e) => {
                 const paramId = e.currentTarget.dataset.parameterId;
                 this.navigateToParameter(paramId);
             });
@@ -224,10 +249,15 @@ export class EvaluationView {
                                 const contribution = (constructScore / 10) * construct.weight * 10;
                                 const evidenceCount = 0; // TODO: Get from evidence system
                                 
+                                const weightPercent = (construct.weight * 100).toFixed(1);
+                                
                                 return `
                                     <div class="construct-row" data-construct-id="${construct.id}">
                                         <div class="construct-row-left">
-                                            <div class="construct-name">${construct.name}</div>
+                                            <div class="construct-name-wrapper">
+                                                <div class="construct-name">${construct.name}</div>
+                                                <div class="construct-weighting">${weightPercent}% Weight</div>
+                                            </div>
                                             <div class="construct-contribution">
                                                 <span class="construct-contribution-label">CONTRIBUTION</span>
                                                 <span class="construct-contribution-value">+${contribution.toFixed(2)} pts</span>
@@ -243,19 +273,21 @@ export class EvaluationView {
                                                 </svg>
                                                 ${evidenceCount > 0 ? `${evidenceCount} Clips` : 'Add Evidence'}
                                             </button>
-                                            <div class="construct-score-input-wrapper">
-                                                <input type="number" 
+                                            <div class="construct-score-slider-wrapper">
+                                                <div class="construct-score-slider-header">
+                                                    <span class="construct-score-display">${constructScore.toFixed(1)}</span>
+                                                </div>
+                                                <input type="range" 
                                                        min="1" 
                                                        max="10" 
                                                        step="0.1"
-                                                       value="${constructScore || ''}" 
-                                                       class="construct-score-input"
+                                                       value="${constructScore || 5}" 
+                                                       class="construct-score-slider"
                                                        data-construct-id="${construct.id}"
-                                                       ${isLocked ? 'disabled' : ''}
-                                                       placeholder="0">
-                                                <div class="construct-score-progress">
-                                                    <div class="construct-score-progress-fill blue" 
-                                                         style="width: ${(constructScore / 10) * 100}%"></div>
+                                                       ${isLocked ? 'disabled' : ''}>
+                                                <div class="construct-score-slider-labels">
+                                                    <span>1</span>
+                                                    <span>10</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -281,11 +313,15 @@ export class EvaluationView {
             </div>
         `;
 
-        // Attach event listeners for score inputs
-        container.querySelectorAll('.construct-score-input').forEach(input => {
-            input.addEventListener('input', (e) => {
+        // Attach event listeners for score sliders
+        container.querySelectorAll('.construct-score-slider').forEach(slider => {
+            slider.addEventListener('input', (e) => {
                 const constructId = e.target.dataset.constructId;
                 const value = parseFloat(e.target.value) || 0;
+                const display = e.target.closest('.construct-score-slider-wrapper').querySelector('.construct-score-display');
+                if (display) {
+                    display.textContent = value.toFixed(1);
+                }
                 this.handleScoreChange(constructId, value);
             });
         });
@@ -294,8 +330,9 @@ export class EvaluationView {
         container.querySelectorAll('.evidence-button').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 if (!isLocked) {
+                    e.stopPropagation();
                     const constructId = e.currentTarget.dataset.constructId;
-                    this.handleAttachEvidence(constructId);
+                    this.showEvidenceDialog(constructId);
                 }
             });
         });
@@ -394,16 +431,14 @@ export class EvaluationView {
                     contributionValue.textContent = `+${contribution.toFixed(2)} pts`;
                 }
 
-                // Update progress bar
-                const progressFill = row.querySelector('.construct-score-progress-fill');
-                if (progressFill) {
-                    progressFill.style.width = `${(constructScore / 10) * 100}%`;
+                // Update slider value and display if they don't match
+                const slider = row.querySelector('.construct-score-slider');
+                const display = row.querySelector('.construct-score-display');
+                if (slider && parseFloat(slider.value) !== constructScore) {
+                    slider.value = constructScore || 5;
                 }
-
-                // Update input value if it doesn't match (to handle clamping)
-                const input = row.querySelector('.construct-score-input');
-                if (input && parseFloat(input.value) !== constructScore) {
-                    input.value = constructScore || '';
+                if (display) {
+                    display.textContent = constructScore.toFixed(1);
                 }
             }
         });
@@ -468,9 +503,125 @@ export class EvaluationView {
         }
     }
 
+    showEvidenceDialog(constructId) {
+        const construct = this.findConstructById(constructId);
+        if (!construct) return;
+
+        // Create modal overlay
+        const modal = document.createElement('div');
+        modal.className = 'evidence-modal-overlay';
+        modal.innerHTML = `
+            <div class="evidence-modal">
+                <div class="evidence-modal-header">
+                    <h3 class="evidence-modal-title">Add Evidence - ${construct.name}</h3>
+                    <button class="evidence-modal-close" id="evidence-modal-close">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="evidence-modal-content">
+                    <div class="evidence-modal-tabs">
+                        <button class="evidence-tab active" data-tab="video">Video Evidence</button>
+                        <button class="evidence-tab" data-tab="note">Add Note</button>
+                    </div>
+                    <div class="evidence-modal-body">
+                        <div class="evidence-tab-content active" data-content="video">
+                            <div class="evidence-upload-area">
+                                <svg class="evidence-upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+                                    <circle cx="12" cy="13" r="3"/>
+                                </svg>
+                                <p class="evidence-upload-text">Click to upload video or drag and drop</p>
+                                <p class="evidence-upload-hint">MP4, MOV up to 100MB</p>
+                                <input type="file" accept="video/*" class="evidence-file-input" id="evidence-file-input" style="display: none;">
+                            </div>
+                            <div class="evidence-uploaded-files" id="evidence-uploaded-files" style="display: none;">
+                                <div class="evidence-file-item">
+                                    <span class="evidence-file-name">video_clip_1.mp4</span>
+                                    <button class="evidence-file-remove">Remove</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="evidence-tab-content" data-content="note">
+                            <div class="evidence-note-form">
+                                <label class="evidence-note-label">Note</label>
+                                <textarea class="evidence-note-textarea" 
+                                          placeholder="Add your notes about this construct..."></textarea>
+                                <div class="evidence-note-char-count">
+                                    <span id="note-char-count">0</span> / 1000 characters
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="evidence-modal-footer">
+                    <button class="btn-secondary" id="evidence-modal-cancel">Cancel</button>
+                    <button class="btn-primary" id="evidence-modal-save">Save</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        // Tab switching
+        modal.querySelectorAll('.evidence-tab').forEach(tab => {
+            tab.addEventListener('click', (e) => {
+                const tabName = e.target.dataset.tab;
+                modal.querySelectorAll('.evidence-tab').forEach(t => t.classList.remove('active'));
+                modal.querySelectorAll('.evidence-tab-content').forEach(c => c.classList.remove('active'));
+                e.target.classList.add('active');
+                modal.querySelector(`[data-content="${tabName}"]`).classList.add('active');
+            });
+        });
+
+        // File input handling
+        const uploadArea = modal.querySelector('.evidence-upload-area');
+        const fileInput = modal.querySelector('#evidence-file-input');
+        uploadArea.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                const uploadedFiles = modal.querySelector('#evidence-uploaded-files');
+                uploadedFiles.style.display = 'block';
+                uploadedFiles.innerHTML = Array.from(e.target.files).map(file => `
+                    <div class="evidence-file-item">
+                        <span class="evidence-file-name">${file.name}</span>
+                        <button class="evidence-file-remove">Remove</button>
+                    </div>
+                `).join('');
+            }
+        });
+
+        // Note character count
+        const noteTextarea = modal.querySelector('.evidence-note-textarea');
+        const charCount = modal.querySelector('#note-char-count');
+        noteTextarea.addEventListener('input', (e) => {
+            charCount.textContent = e.target.value.length;
+        });
+
+        // Close handlers
+        const closeModal = () => {
+            document.body.removeChild(modal);
+        };
+
+        modal.querySelector('#evidence-modal-close').addEventListener('click', closeModal);
+        modal.querySelector('#evidence-modal-cancel').addEventListener('click', closeModal);
+        modal.querySelector('.evidence-modal-overlay').addEventListener('click', (e) => {
+            if (e.target === modal) closeModal();
+        });
+
+        // Save handler
+        modal.querySelector('#evidence-modal-save').addEventListener('click', () => {
+            // TODO: Implement actual save logic
+            alert(`Evidence saved for construct: ${constructId}`);
+            closeModal();
+        });
+    }
+
     handleAttachEvidence(constructId) {
-        // TODO: Implement file upload/note attachment
-        alert(`Mockup: File picker would open here for construct: ${constructId}`);
+        // This method is kept for backward compatibility but now uses showEvidenceDialog
+        this.showEvidenceDialog(constructId);
     }
 
     attachEventListeners() {
