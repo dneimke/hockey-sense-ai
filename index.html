@@ -4,6 +4,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HockeySense AI | Talent Evaluation Platform</title>
+    <script>
+        // Set base path for GitHub Pages subdirectory
+        (function() {
+            const path = window.location.pathname;
+            // Extract repository name from path (e.g., /hockey-sense-ai/ or /hockey-sense-ai/index.html)
+            const pathParts = path.split('/').filter(p => p);
+            if (pathParts.length > 0) {
+                const repoName = pathParts[0];
+                // Only set base if we're in a subdirectory (not root GitHub Pages)
+                if (repoName && repoName !== '' && !repoName.includes('.')) {
+                    const base = '/' + repoName + '/';
+                    const baseTag = document.createElement('base');
+                    baseTag.href = base;
+                    document.head.insertBefore(baseTag, document.head.firstChild);
+                }
+            }
+        })();
+    </script>
     <link rel="stylesheet" href="css/main.css">
     <link rel="stylesheet" href="css/components.css">
     <link rel="stylesheet" href="css/views.css">

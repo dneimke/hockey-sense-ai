@@ -36,8 +36,12 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Upload entire repository
-          path: '.'
+          # Upload only the necessary files for the website
+          path: |
+            index.html
+            .nojekyll
+            css/
+            js/
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
