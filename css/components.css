@@ -289,11 +289,3 @@
     background-color: var(--primary-color);
 }
 
-.parameter-bar-fill.purple {
-    background-color: #9333ea;
-}
-
-.parameter-bar-fill.green {
-    background-color: var(--success-color);
-}
-
